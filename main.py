@@ -81,14 +81,9 @@ async def process_opencode_task(user_prompt: str, chat_id: int):
         cmd = ["opencode", "run", "--auto", user_prompt]
         logger.info(f"[OPENCODE] Chạy lệnh: {' '.join(cmd)} (cwd={VAULT_DIR})")
 
-        env = os.environ.copy()
-        if not env.get("GITHUB_TOKEN") and GITHUB_PAT:
-            env["GITHUB_TOKEN"] = GITHUB_PAT
-
         process = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=VAULT_DIR,
-            env=env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
