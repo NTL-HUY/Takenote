@@ -75,13 +75,20 @@ async def process_opencode_task(user_prompt: str, chat_id: int):
         # 1. Sync Git
         setup_and_sync_git()
 
-        # 2. Gọi Opencode CLI
-        cmd = f'opencode "{user_prompt}"'
-        logger.info(f"[OPENCODE] Chạy lệnh: {cmd} (cwd={VAULT_DIR})")
+        # 2. Gọi Opencode CLI headless (chế độ 1-lần cho script)
+        #    --auto: tự duyệt permission, tránh treo vì không có TTY
+        #    GITHUB_TOKEN: dùng GITHUB_PAT sẵn có để chạy model free qua GitHub Copilot
+        cmd = ["opencode", "run", "--auto", user_prompt]
+        logger.info(f"[OPENCODE] Chạy lệnh: {' '.join(cmd)} (cwd={VAULT_DIR})")
 
-        process = await asyncio.create_subprocess_shell(
-            cmd,
+        env = os.environ.copy()
+        if not env.get("GITHUB_TOKEN") and GITHUB_PAT:
+            env["GITHUB_TOKEN"] = GITHUB_PAT
+
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
             cwd=VAULT_DIR,
+            env=env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
