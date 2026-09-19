@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Cài đặt Git, Node.js (cần thiết cho opencode cli)
+# Cài đặt Git, Curl và Node.js v20 (cần thiết cho npm CLI tools)
 RUN apt-get update && apt-get install -y \
     git \
     curl \
@@ -8,15 +8,19 @@ RUN apt-get update && apt-get install -y \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Cài đặt Opencode CLI toàn cục
-RUN npm install -g opencode
+# Cài đặt Opencode CLI toàn cục từ npm
+# (Nếu ở local bạn cài qua pip thì sửa thành: RUN pip install --no-cache-dir opencode)
+RUN npm install -g opencode-ai
 
 WORKDIR /app
 
-# Cài đặt dependencies Python
+# Cài đặt các thư viện Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy toàn bộ code dự án vào container
 COPY . .
 
-CMD ["uvicorn", "app:main", "--host", "0.0.0.0", "--port", "10000"]
+# Expose port và chạy FastAPI app với Uvicorn
+EXPOSE 10000
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "10000"]
