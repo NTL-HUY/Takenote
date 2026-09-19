@@ -8,6 +8,7 @@ import requests
 
 from dotenv import load_dotenv
 load_dotenv()
+task_lock = asyncio.Lock()
 # ===== LOGGING SETUP =====
 logging.basicConfig(
     level=logging.INFO,
@@ -70,64 +71,65 @@ def setup_and_sync_git():
 
 
 async def process_opencode_task(user_prompt: str, chat_id: int):
-    logger.info(f"### BẮT ĐẦU TASK cho chat_id={chat_id} | prompt='{user_prompt}' ###")
-    try:
-        # 1. Sync Git
-        setup_and_sync_git()
+    async with task_lock:
+        logger.info(f"### BẮT ĐẦU TASK cho chat_id={chat_id} | prompt='{user_prompt}' ###")
+        try:
+            # 1. Sync Git
+            setup_and_sync_git()
 
-        # 2. Gọi Opencode CLI headless (chế độ 1-lần cho script)
-        #    --auto: tự duyệt permission, tránh treo vì không có TTY
-        #    GITHUB_TOKEN: dùng GITHUB_PAT sẵn có để chạy model free qua GitHub Copilot
-        cmd = ["opencode", "run", "--auto", user_prompt]
-        logger.info(f"[OPENCODE] Chạy lệnh: {' '.join(cmd)} (cwd={VAULT_DIR})")
+            # 2. Gọi Opencode CLI headless (chế độ 1-lần cho script)
+            #    --auto: tự duyệt permission, tránh treo vì không có TTY
+            #    GITHUB_TOKEN: dùng GITHUB_PAT sẵn có để chạy model free qua GitHub Copilot
+            cmd = ["opencode", "run", "--auto", user_prompt]
+            logger.info(f"[OPENCODE] Chạy lệnh: {' '.join(cmd)} (cwd={VAULT_DIR})")
 
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            cwd=VAULT_DIR,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await process.communicate()
-        stdout_text = stdout.decode("utf-8", errors="replace")
-        stderr_text = stderr.decode("utf-8", errors="replace")
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                cwd=VAULT_DIR,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await process.communicate()
+            stdout_text = stdout.decode("utf-8", errors="replace")
+            stderr_text = stderr.decode("utf-8", errors="replace")
 
-        logger.info(f"[OPENCODE] returncode={process.returncode}")
-        if stdout_text:
-            logger.info(f"[OPENCODE][stdout]\n{stdout_text}")
-        if stderr_text:
-            logger.info(f"[OPENCODE][stderr]\n{stderr_text}")
+            logger.info(f"[OPENCODE] returncode={process.returncode}")
+            if stdout_text:
+                logger.info(f"[OPENCODE][stdout]\n{stdout_text}")
+            if stderr_text:
+                logger.info(f"[OPENCODE][stderr]\n{stderr_text}")
 
-        if process.returncode != 0:
-            logger.error("[OPENCODE] Lệnh thất bại!")
-            send_telegram(chat_id, f"❌ Lỗi Opencode: {stderr_text[:300] or stdout_text[:300]}")
-            return
-
-        # 3. Kiểm tra thay đổi trong repo
-        status_res = run_cmd(["git", "status", "--porcelain"], cwd=VAULT_DIR)
-        logger.info(f"[GIT] Trạng thái thay đổi:\n{status_res.stdout or '(không có gì thay đổi)'}")
-
-        run_cmd(["git", "add", "."], cwd=VAULT_DIR)
-        commit_res = run_cmd(
-            ["git", "commit", "-m", f"auto: {user_prompt[:30]}"], cwd=VAULT_DIR
-        )
-
-        if "nothing to commit" not in commit_res.stdout:
-            push_res = run_cmd(["git", "push"], cwd=VAULT_DIR)
-            if push_res.returncode != 0:
-                logger.error("[GIT] Push thất bại!")
-                send_telegram(chat_id, f"❌ Push thất bại: {push_res.stderr[:300]}")
+            if process.returncode != 0:
+                logger.error("[OPENCODE] Lệnh thất bại!")
+                send_telegram(chat_id, f"❌ Lỗi Opencode: {stderr_text[:300] or stdout_text[:300]}")
                 return
-            logger.info("[GIT] Push thành công")
-            send_telegram(chat_id, "✅ Đã take note và push lên GitHub!")
-        else:
-            logger.info("[GIT] Không có gì để commit")
-            send_telegram(chat_id, "ℹ️ Không có thay đổi nào được tạo.")
 
-    except Exception as e:
-        logger.exception(f"[EXCEPTION] Lỗi hệ thống trong process_opencode_task")
-        send_telegram(chat_id, f"💥 Lỗi hệ thống: {str(e)}")
-    finally:
-        logger.info(f"### KẾT THÚC TASK cho chat_id={chat_id} ###")
+            # 3. Kiểm tra thay đổi trong repo
+            status_res = run_cmd(["git", "status", "--porcelain"], cwd=VAULT_DIR)
+            logger.info(f"[GIT] Trạng thái thay đổi:\n{status_res.stdout or '(không có gì thay đổi)'}")
+
+            run_cmd(["git", "add", "."], cwd=VAULT_DIR)
+            commit_res = run_cmd(
+                ["git", "commit", "-m", f"auto: {user_prompt[:30]}"], cwd=VAULT_DIR
+            )
+
+            if "nothing to commit" not in commit_res.stdout:
+                push_res = run_cmd(["git", "push"], cwd=VAULT_DIR)
+                if push_res.returncode != 0:
+                    logger.error("[GIT] Push thất bại!")
+                    send_telegram(chat_id, f"❌ Push thất bại: {push_res.stderr[:300]}")
+                    return
+                logger.info("[GIT] Push thành công")
+                send_telegram(chat_id, "✅ Đã take note và push lên GitHub!")
+            else:
+                logger.info("[GIT] Không có gì để commit")
+                send_telegram(chat_id, "ℹ️ Không có thay đổi nào được tạo.")
+
+        except Exception as e:
+            logger.exception(f"[EXCEPTION] Lỗi hệ thống trong process_opencode_task")
+            send_telegram(chat_id, f"💥 Lỗi hệ thống: {str(e)}")
+        finally:
+            logger.info(f"### KẾT THÚC TASK cho chat_id={chat_id} ###")
 
 
 @app.post("/webhook")
