@@ -132,22 +132,36 @@ async def process_opencode_task(user_prompt: str, chat_id: int):
             logger.info(f"### KẾT THÚC TASK cho chat_id={chat_id} ###")
 
 
-@app.post("/webhook")
-async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
-    data = await request.json()
-    logger.info(f"[WEBHOOK] Nhận request: {data}")
+REPO_OWNER = "NTL-HUY"
+REPO_NAME = "Obsidian-Vault"
 
+def trigger_github_action(user_prompt: str, chat_id: int):
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/dispatches"
+    headers = {
+        "Authorization": f"Bearer {GITHUB_PAT}",
+        "Accept": "application/vnd.github+json",
+    }
+    payload = {
+        "event_type": "opencode_task",
+        "client_payload": {
+            "prompt": user_prompt,
+            "chat_id": chat_id,
+        }
+    }
+    resp = requests.post(url, headers=headers, json=payload)
+    logger.info(f"[GITHUB] Trigger dispatch status={resp.status_code}")
+    return resp.status_code == 204
+
+@app.post("/webhook")
+async def telegram_webhook(request: Request):
+    data = await request.json()
     message = data.get("message", {})
     user_prompt = message.get("text", "")
     chat_id = message.get("chat", {}).get("id")
 
-    logger.info(f"[WEBHOOK] user_prompt='{user_prompt}' chat_id={chat_id}")
-
     if user_prompt and chat_id:
-        send_telegram(chat_id, "⏳ Đang chạy Opencode take note...")
-        background_tasks.add_task(process_opencode_task, user_prompt, chat_id)
-    else:
-        logger.warning("[WEBHOOK] Thiếu user_prompt hoặc chat_id, bỏ qua")
+        send_telegram(chat_id, "⏳ Đã gửi task lên GitHub Actions xử lý...")
+        trigger_github_action(user_prompt, chat_id)
 
     return {"status": "ok"}
 
@@ -158,3 +172,5 @@ async def startup_event():
     logger.info(f"TELEGRAM_BOT_TOKEN set: {bool(TELEGRAM_BOT_TOKEN)}")
     logger.info(f"GITHUB_PAT set: {bool(GITHUB_PAT)}")
     logger.info(f"REPO_URL: {REPO_URL}")
+
+
