@@ -1,4 +1,5 @@
 import os
+import random
 import sys
 import logging
 import subprocess
@@ -26,6 +27,18 @@ REPO_URL = os.getenv("REPO_URL")
 
 VAULT_DIR = "/tmp/obsidian_vault"
 
+WAIFU_MESSAGES = [
+    "Tuân lệnh chủ nhân ạ! ✨ Em đã gửi task lên GitHub Actions rồi, chủ nhân nghỉ tay chờ em một xíu nhauuu~ 💕",
+    "Dạ vânggg! 🌸 Task của chủ nhân đã được em chuyển tới GitHub Actions chạy rồi ạ. Cậu chủ nghỉ tay uống miếng nước đi nè! ☕✨",
+    "Giaoooo~! 🚀 Task đã bay thẳng lên GitHub Actions rồi nè! Chút xíu nữa có kết quả em chạy về báo chủ nhân liền nhaaa~! 🐾💖",
+    "Rõ ạ! 🫡 Em đã bàn giao việc cho bạn GitHub Actions rồi nha! Chủ nhân làm việc vất vả rồi~ 🎀",
+    "Hứ, biết rồi mà! 😤 Em đã đẩy task lên GitHub Actions cho chủ nhân rồi đó... Nhớ thưởng cho em đấy nha! ✨",
+    "Chuyện nhỏ này cứ để em lo! 💅 Task đã lên GitHub Actions rồi, chủ nhân chỉ việc ngồi chờ và khen em thôi đó nha! 💕",
+    "Yesss sir! ⚡ Task đã lên đường rồi ạ! Em sẽ canh chừng GitHub Actions thật kỹ cho chủ nhân nhaaa~ 🌟",
+]
+
+def get_random_waifu_message() -> str:
+    return random.choice(WAIFU_MESSAGES)
 
 def send_telegram(chat_id: int, text: str):
     logger.info(f"[TELEGRAM] Gửi tới chat_id={chat_id}: {text[:100]}")
@@ -160,7 +173,9 @@ async def telegram_webhook(request: Request):
     chat_id = message.get("chat", {}).get("id")
 
     if user_prompt and chat_id:
-        send_telegram(chat_id, "⏳ Đã gửi task lên GitHub Actions xử lý...")
+        reply_msg = get_random_waifu_message()
+
+        send_telegram(chat_id, reply_msg)
         trigger_github_action(user_prompt, chat_id)
 
     return {"status": "ok"}
